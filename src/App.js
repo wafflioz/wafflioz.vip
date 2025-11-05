@@ -3,7 +3,7 @@ import Iridescence from './Iridescence.jsx';
 import GlassUI from './GlassUI.jsx';
 
 function App() {
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const [setScrollProgress] = useState(0);
   const iridescenceRef = useRef(null);
 
   useEffect(() => {

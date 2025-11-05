@@ -24,7 +24,55 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>React App</title>
+    <title>wafflioz.vip</title>
+    <script>
+      (function () {
+        // Glitch title effect
+        const glitchText = "wafflioz.vip";
+        const glitchChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+        let glitchIndex = 0;
+
+        function glitchEffect() {
+          const glitched = glitchText
+            .split("")
+            .map((char, i) => {
+              return i < glitchIndex
+                ? char
+                : glitchChars[Math.floor(Math.random() * glitchChars.length)];
+            })
+            .join("");
+
+          document.title = glitched;
+
+          if (glitchIndex <= glitchText.length) {
+            glitchIndex++;
+            setTimeout(glitchEffect, 100);
+          } else {
+            // reset after a pause so the effect repeats
+            glitchIndex = 0;
+            setTimeout(glitchEffect, 1000);
+          }
+        }
+
+        // Start the effect when the page is visible to avoid running while hidden
+        function startWhenVisible() {
+          if (document.visibilityState === "visible") {
+            glitchEffect();
+          } else {
+            document.addEventListener("visibilitychange", function onVis() {
+              if (document.visibilityState === "visible") {
+                document.removeEventListener("visibilitychange", onVis);
+                glitchEffect();
+              }
+            });
+          }
+        }
+
+        // Set initial title and start
+        document.title = glitchText;
+        startWhenVisible();
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
