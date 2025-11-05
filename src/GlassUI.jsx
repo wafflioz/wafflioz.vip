@@ -262,7 +262,7 @@ $$$!       Y$P  !$$?  .5$G!P$Y   ^$$5           ~$$Y          !$B :&$J  ?$$&.   
                 Home
               </a>
               <a
-                href="https://www.wafflioz.vip"
+                href="https://wafflioz.vip"
                 style={{
                   color: "white",
                   textDecoration: "none",
