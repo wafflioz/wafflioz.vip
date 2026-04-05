@@ -4,7 +4,8 @@ export default function GlassUI() {
   const [showHomePage, setShowHomePage] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   const comingSoonRef = useRef(null);
-  const asciiRef = useRef(null);
+  const canvasRef = useRef(null);
+  const canvasWrapRef = useRef(null);
 
   const asciiArt = `                                          
                                                                .G$$G.                               
@@ -68,30 +69,112 @@ $$$!       Y$P  !$$?  .5$G!P$Y   ^$$5           ~$$Y          !$B :&$J  ?$$&.   
     requestAnimationFrame(animate);
   };
 
-  // Populate the ASCII pre with span-wrapped characters so each char can animate
+  // Canvas-based wiggle: one GPU layer, one rAF loop, every char moves independently.
   useEffect(() => {
-    const pre = asciiRef.current;
-    if (!pre) return;
-
-    // Clear any previous content when toggling
-    pre.innerHTML = "";
-
     if (!showHomePage) return;
+    const canvas = canvasRef.current;
+    const wrap = canvasWrapRef.current;
+    if (!canvas || !wrap) return;
 
-    /* asciiArt.split("\n").forEach((line) => {
-      const div = document.createElement("div");
-      for (const char of line) {
-        const span = document.createElement("span");
-        span.textContent = char === " " ? "\u00A0" : char;
-        span.className = "wiggle";
-        span.style.animationDelay = `${Math.random() * 2}s`;
-        div.appendChild(span);
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const lines = asciiArt.split("\n");
+    const maxCols = lines.reduce((m, l) => Math.max(m, l.length), 0);
+
+    // Build a flat list of non-space characters, each with its own phase offsets.
+    // Spaces are skipped entirely (they're invisible and just burn cycles to draw).
+    let chars = [];
+    let cssW = 0;
+    let cssH = 0;
+    let charW = 6;
+    let lineH = 11;
+
+    const setup = () => {
+      const available = Math.max(120, wrap.clientWidth);
+      // Monospace aspect ratio ≈ 0.6 — fit longest line into available width.
+      const fontSize = Math.max(
+        4,
+        Math.min(16, Math.floor(available / maxCols / 0.6))
+      );
+      lineH = Math.ceil(fontSize * 1.1);
+
+      ctx.font = `${fontSize}px monospace`;
+      charW = ctx.measureText("M").width;
+
+      cssW = Math.ceil(maxCols * charW);
+      cssH = Math.ceil(lines.length * lineH);
+
+      canvas.width = Math.ceil(cssW * dpr);
+      canvas.height = Math.ceil(cssH * dpr);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = `${fontSize}px monospace`;
+      ctx.fillStyle = "white";
+      ctx.textBaseline = "top";
+
+      chars = [];
+      for (let row = 0; row < lines.length; row++) {
+        const line = lines[row];
+        const y = row * lineH;
+        for (let col = 0; col < line.length; col++) {
+          const ch = line[col];
+          if (ch === " ") continue;
+          chars.push({
+            ch,
+            x: col * charW,
+            y,
+            // Random phase 0..1 — equivalent to CSS animation-delay 0..2s on a 2s cycle.
+            phase: Math.random(),
+          });
+        }
       }
-      pre.appendChild(div);
-    }); 
-*/
+    };
+
+    setup();
+
+    let raf = 0;
+    const start = performance.now();
+    // Match the original CSS @keyframes wiggle exactly:
+    //   0%:(0,0)  25%:(0.5,-0.5)  50%:(-0.5,0.5)  75%:(0.5,0.5)  100%:(0,0)
+    // with `ease-in-out` between waypoints, 2s duration, random per-char delay.
+    const WX = [0, 0.5, -0.5, 0.5, 0];
+    const WY = [0, -0.5, 0.5, 0.5, 0];
+    const DURATION = 2; // seconds, matches original
+
+    const draw = (now) => {
+      const tNorm = (now - start) / 1000 / DURATION;
+      ctx.clearRect(0, 0, cssW, cssH);
+      for (let i = 0; i < chars.length; i++) {
+        const c = chars[i];
+        // Normalized progress 0..1 through the 2s cycle for this char.
+        let p = tNorm + c.phase;
+        p = p - (p | 0); // fast fmod for positive values
+        // Which of the 4 segments (0→25%, 25→50%, 50→75%, 75→100%) we're in.
+        const seg4 = p * 4;
+        const segIdx = seg4 | 0;
+        const segT = seg4 - segIdx;
+        // Smoothstep — visually indistinguishable from CSS ease-in-out at this amplitude.
+        const eased = segT * segT * (3 - 2 * segT);
+        const x0 = WX[segIdx];
+        const y0 = WY[segIdx];
+        const x1 = WX[segIdx + 1];
+        const y1 = WY[segIdx + 1];
+        const dx = x0 + (x1 - x0) * eased;
+        const dy = y0 + (y1 - y0) * eased;
+        ctx.fillText(c.ch, c.x + dx, c.y + dy);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+
+    const onResize = () => setup();
+    window.addEventListener("resize", onResize);
+
     return () => {
-      pre.innerHTML = "";
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
     };
   }, [showHomePage, asciiArt]);
 
@@ -300,90 +383,24 @@ $$$!       Y$P  !$$?  .5$G!P$Y   ^$$5           ~$$Y          !$B :&$J  ?$$&.   
               pointerEvents: "auto",
             }}
           >
-            <pre
-              id="ascii"
-              ref={asciiRef}
+            <div
+              ref={canvasWrapRef}
               style={{
-                color: "white",
-                fontSize: "clamp(1rem, 0.8vw, 0.5rem)",
-                fontWeight: "400",
+                width: "100%",
                 marginBottom: "5rem",
-                lineHeight: "1.1",
-                textShadow: "0 0 10px rgba(255,255,255,0.5)",
-                letterSpacing: "0",
-                fontFamily: "monospace",
-                whiteSpace: "pre",
-                overflow: "hidden",
+                display: "flex",
+                justifyContent: "center",
                 animation:
                   "fadeInScale 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both",
               }}
-            ></pre>
-
-            {/* CTA Buttons */}
-            <div
-              style={{
-                display: "flex",
-                gap: "1.5rem",
-                justifyContent: "center",
-                flexWrap: "wrap",
-                animation:
-                  "fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both",
-              }}
             >
-              <button
+              <canvas
+                ref={canvasRef}
                 style={{
-                  background: "rgba(255, 255, 255, 0.9)",
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  borderRadius: "100px",
-                  padding: "1rem 2.5rem",
-                  color: "#1a1a2e",
-                  fontSize: "1.125rem",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.15)",
-                  transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+                  display: "block",
+                  filter: "drop-shadow(0 0 6px rgba(255,255,255,0.5))",
                 }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = "translateY(-4px) scale(1.02)";
-                  e.target.style.boxShadow = "0 16px 48px rgba(0, 0, 0, 0.25)";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = "translateY(0) scale(1)";
-                  e.target.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.15)";
-                }}
-              >
-                Learn More
-              </button>
-
-              <button
-                style={{
-                  background: "rgba(255, 255, 255, 0.15)",
-                  backdropFilter: "blur(20px)",
-                  WebkitBackdropFilter: "blur(20px)",
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  borderRadius: "100px",
-                  padding: "1rem 2.5rem",
-                  color: "white",
-                  fontSize: "1.125rem",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)",
-                  transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
-                  textShadow: "0 2px 10px rgba(0,0,0,0.1)",
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = "rgba(255, 255, 255, 0.25)";
-                  e.target.style.transform = "translateY(-4px) scale(1.02)";
-                  e.target.style.boxShadow = "0 16px 48px rgba(0, 0, 0, 0.2)";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = "rgba(255, 255, 255, 0.15)";
-                  e.target.style.transform = "translateY(0) scale(1)";
-                  e.target.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.1)";
-                }}
-              >
-                Get Started
-              </button>
+              />
             </div>
           </div>
         </>
@@ -448,7 +465,6 @@ $$$!       Y$P  !$$?  .5$G!P$Y   ^$$5           ~$$Y          !$B :&$J  ?$$&.   
             transform: translateY(-8px);
           }
         }
-        /* .wiggle { display: inline-block; animation: wiggle 2s infinite ease-in-out; } @keyframes wiggle { 0%, 100% { transform: translate(0px, 0px); } 25% { transform: translate(0.5px, -0.5px); } 50% { transform: translate(-0.5px, 0.5px); } 75% { transform: translate(0.5px, 0.5px); } } */
       `}</style>
     </div>
   );
