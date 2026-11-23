@@ -1,73 +1,55 @@
-import React, { useState, useEffect, useRef } from 'react';
-import Iridescence from './Iridescence.jsx';
-import GlassUI from './GlassUI.jsx';
+import { useEffect, useState } from 'react';
+import AsciiLogo from './AsciiLogo';
+import Iridescence from './Iridescence';
+import './App.css';
 
-function App() {
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const iridescenceRef = useRef(null);
+function useReducedMotion() {
+  const query = '(prefers-reduced-motion: reduce)';
+  const [reduced, setReduced] = useState(() => window.matchMedia?.(query).matches ?? false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      const progress = window.scrollProgress || 0;
-      setScrollProgress(progress);
+    const media = window.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setReduced(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
-      if (iridescenceRef.current) {
-        const parallaxAmount = progress * 20;
-        iridescenceRef.current.style.transform = `scale(${1 + progress * 0.05}) translateY(${parallaxAmount}px)`;
-        iridescenceRef.current.style.filter = `blur(${progress * 3}px)`;
-      }
-    };
+  return reduced;
+}
 
-    const handleMouseMove = (e) => {
-      if (iridescenceRef.current) {
-        const event = new CustomEvent('iridescence-mouse', {
-          detail: {
-            x: e.clientX / window.innerWidth,
-            y: 1.0 - e.clientY / window.innerHeight,
-          },
-        });
-        window.dispatchEvent(event);
-      }
-    };
-
-    window.addEventListener('scroll-update', handleScroll);
-    window.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-      window.removeEventListener('scroll-update', handleScroll);
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-    // Add setScrollProgress to satisfy ESLint (it's safe)
-  }, [setScrollProgress]);
+export default function App() {
+  const reducedMotion = useReducedMotion();
+  const [motionOverride, setMotionOverride] = useState(null);
+  const [shaderAvailable, setShaderAvailable] = useState(false);
+  const moving = motionOverride ?? !reducedMotion;
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        width: '100vw',
-        height: '100vh',
-        margin: 0,
-        padding: 0,
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        ref={iridescenceRef}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          transition: 'transform 0.1s ease-out, filter 0.1s ease-out',
-          willChange: 'transform, filter',
-        }}
-      >
-        <Iridescence color={[0.5, 0.6, 0.8]} mouseReact={true} amplitude={0.1} speed={1.5} />
-      </div>
-      <GlassUI />
+    <div className="landing">
+      <Iridescence moving={moving} onAvailabilityChange={setShaderAvailable} />
+      <header className="masthead">
+        <span className="site-name">wafflioz.vip</span>
+        {shaderAvailable && (
+          <button
+            className="motion-control"
+            type="button"
+            onClick={() => setMotionOverride(!moving)}
+          >
+            <span className="motion-icon" data-moving={moving} aria-hidden="true" />
+            {moving ? 'Pause motion' : 'Resume motion'}
+          </button>
+        )}
+      </header>
+
+      <main className="hero">
+        <AsciiLogo />
+        <p className="hero-caption">Distributed GPU compute</p>
+      </main>
+
+      <footer className="site-footer">
+        <span>Parallel execution</span>
+        <span>GPU-accelerated workloads</span>
+      </footer>
     </div>
   );
 }
-
-export default App;
